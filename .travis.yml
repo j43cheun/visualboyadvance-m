@@ -25,6 +25,11 @@ matrix:
           os: osx
           osx_image: xcode12
           install: export PATH="/usr/local/opt/ccache/libexec:$PATH"
+        - env: BUILD_ENV=windows
+          os: windows
+          cache:
+              directories:
+                  c:/vcpkg/installed
 
 before_install:
     - |
@@ -45,7 +50,9 @@ before_install:
         esac
     - |
         if [ "$BUILD_ENV" != libretro ]; then
-            ./installdeps $INSTALLDEPS_ARGS $ARG
+            if [ "$BUILD_ENV" != windows ]; then
+                ./installdeps $INSTALLDEPS_ARGS $ARG
+            fi
             DIR=build
         else
             DIR=src/libretro
@@ -57,6 +64,11 @@ before_script:
             CMAKE_ARGS="$CMAKE_ARGS -DENABLE_SDL=ON"
         fi
         case "$BUILD_ENV" in
+            windows)
+                CMAKE_ARGS="$CMAKE_ARGS -DVCPKG_TARGET_TRIPLET=x64-windows-static"
+                export VCPKG_ROOT=c:/vcpkg
+                choco install -y ninja
+                ;;
             utf8|nostl)
                 sudo apt-get -y install stow libwxgtk3.0-gtk3-dev
                 (
@@ -74,7 +86,8 @@ before_script:
 script:
     - mkdir -p -- "$DIR"
     - cd -- "$DIR"
-    - if [ "$BUILD_ENV" != libretro ]; then $CMAKE $CMAKE_ARGS ..; fi
+    - if [ "$BUILD_ENV" != libretro ] && [ "$BUILD_ENV" != windows ]; then $CMAKE $CMAKE_ARGS ..; fi
+    - if [ "$BUILD_ENV"  = windows  ]; then travis_wait 90 powershell -noprofile -noexit -command "& ../tools/win/pwsh_vs_env.ps1; $CMAKE $CMAKE_ARGS .."; fi
     - if [ "$BUILD_ENV" != libretro ]; then ninja; else make; fi
     - if [ "$BUILD_ENV" != libretro ]; then DESTDIR=/tmp/VBAM ninja install; fi
     - |
